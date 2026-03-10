@@ -1,0 +1,1639 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5efe1">
+  <title>数独拍照识别与求解</title>
+  <style>
+    :root {
+      --bg: #f5efe1;
+      --panel: rgba(255, 250, 241, 0.9);
+      --panel-strong: rgba(255, 248, 235, 0.98);
+      --stroke: rgba(93, 67, 43, 0.18);
+      --text: #2f2418;
+      --muted: #6e5b47;
+      --accent: #d46a2f;
+      --accent-strong: #b44f1f;
+      --accent-soft: rgba(212, 106, 47, 0.15);
+      --ok: #217a4c;
+      --warn: #b86e15;
+      --shadow: 0 24px 60px rgba(84, 56, 31, 0.15);
+      --radius: 28px;
+      --grid-line: rgba(80, 56, 35, 0.22);
+      --grid-bold: rgba(51, 35, 21, 0.6);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Trebuchet MS", "Segoe UI", "PingFang SC", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(227, 194, 123, 0.45), transparent 32%),
+        radial-gradient(circle at right 10% top 8%, rgba(212, 106, 47, 0.18), transparent 26%),
+        linear-gradient(160deg, #fbf6ec 0%, #f5efe1 46%, #ebe0cb 100%);
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: auto;
+      pointer-events: none;
+      z-index: -1;
+      border-radius: 999px;
+      filter: blur(18px);
+    }
+
+    body::before {
+      width: 280px;
+      height: 280px;
+      left: -60px;
+      bottom: -80px;
+      background: rgba(124, 146, 106, 0.18);
+    }
+
+    body::after {
+      width: 380px;
+      height: 380px;
+      right: -100px;
+      top: -120px;
+      background: rgba(212, 106, 47, 0.12);
+    }
+
+    .app {
+      width: min(1200px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 32px;
+    }
+
+    .hero {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 20px;
+      padding: 10px 4px 2px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      width: fit-content;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 250, 241, 0.72);
+      border: 1px solid rgba(93, 67, 43, 0.12);
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 5vw, 48px);
+      line-height: 0.98;
+      letter-spacing: -0.04em;
+      max-width: 11ch;
+    }
+
+    .intro {
+      max-width: 68ch;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 15px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(320px, 1.15fr) minmax(300px, 0.85fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .panel {
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--radius);
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 18%),
+        linear-gradient(140deg, rgba(255, 255, 255, 0.14), transparent 60%);
+      pointer-events: none;
+    }
+
+    .panel-inner {
+      position: relative;
+      z-index: 1;
+      padding: 20px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: -0.03em;
+    }
+
+    .section-head p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 46ch;
+    }
+
+    .toolbar,
+    .actions,
+    .tips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .button,
+    .file-button {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 0 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(93, 67, 43, 0.14);
+      background: rgba(255, 252, 247, 0.88);
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 12px 24px rgba(76, 56, 37, 0.08);
+    }
+
+    .button:hover,
+    .file-button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(180, 79, 31, 0.34);
+    }
+
+    .button:active,
+    .file-button:active {
+      transform: translateY(0);
+    }
+
+    .button.primary {
+      background: linear-gradient(135deg, #e17a3b 0%, #c95b26 100%);
+      border-color: rgba(180, 79, 31, 0.68);
+      color: #fff8f2;
+    }
+
+    .button.ghost {
+      background: rgba(255, 250, 241, 0.56);
+    }
+
+    .file-button input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .status {
+      padding: 13px 14px;
+      border-radius: 16px;
+      background: rgba(250, 243, 232, 0.76);
+      border: 1px solid rgba(93, 67, 43, 0.1);
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 52px;
+    }
+
+    .status.ok {
+      color: var(--ok);
+      background: rgba(223, 244, 233, 0.9);
+      border-color: rgba(33, 122, 76, 0.18);
+    }
+
+    .status.warn {
+      color: var(--warn);
+      background: rgba(252, 239, 217, 0.92);
+      border-color: rgba(184, 110, 21, 0.18);
+    }
+
+    .canvas-shell,
+    .board-shell {
+      position: relative;
+      border-radius: 22px;
+      overflow: hidden;
+      border: 1px solid rgba(80, 56, 35, 0.14);
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 247, 233, 0.82));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.64);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #f1e7d4;
+    }
+
+    .tip {
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255, 251, 244, 0.82);
+      border: 1px dashed rgba(93, 67, 43, 0.18);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .sudoku-grid {
+      display: grid;
+      grid-template-columns: repeat(9, minmax(0, 1fr));
+      gap: 0;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 2px solid rgba(51, 35, 21, 0.58);
+      background: var(--panel-strong);
+      box-shadow: 0 16px 28px rgba(80, 56, 35, 0.08);
+    }
+
+    .cell {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border: 0;
+      border-right: 1px solid var(--grid-line);
+      border-bottom: 1px solid var(--grid-line);
+      background: rgba(255, 253, 249, 0.88);
+      color: var(--text);
+      text-align: center;
+      font-size: clamp(18px, 2vw, 28px);
+      font-weight: 700;
+      caret-color: var(--accent);
+      outline: none;
+    }
+
+    .cell[data-col="2"],
+    .cell[data-col="5"] {
+      border-right-color: var(--grid-bold);
+      border-right-width: 2px;
+    }
+
+    .cell[data-row="2"],
+    .cell[data-row="5"] {
+      border-bottom-color: var(--grid-bold);
+      border-bottom-width: 2px;
+    }
+
+    .cell.given {
+      background: rgba(238, 230, 214, 0.92);
+    }
+
+    .cell.solved {
+      color: var(--accent-strong);
+      background: rgba(255, 244, 235, 0.95);
+    }
+
+    .cell.uncertain {
+      background: rgba(255, 240, 214, 0.96);
+      color: #8a4b16;
+    }
+
+    .cell:focus {
+      position: relative;
+      z-index: 1;
+      box-shadow: inset 0 0 0 2px rgba(212, 106, 47, 0.8);
+      background: #fffdf8;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .legend i {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 4px;
+      background: #ddd;
+    }
+
+    .legend .given i {
+      background: rgba(238, 230, 214, 0.92);
+    }
+
+    .legend .uncertain i {
+      background: rgba(255, 240, 214, 0.96);
+    }
+
+    .legend .solved i {
+      background: rgba(255, 244, 235, 0.95);
+    }
+
+    footer {
+      margin-top: 16px;
+      padding: 0 4px;
+      color: rgba(88, 67, 48, 0.78);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 940px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .app {
+        width: min(100vw - 20px, 1100px);
+      }
+
+      .panel-inner {
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="hero">
+      <span class="eyebrow">Sudoku Scanner</span>
+      <h1>拍照识别数独，然后直接求解</h1>
+      <p class="intro">
+        这个工具完全在浏览器本地运行：拍照或上传图片，拖动四个角点贴合数独外边框，识别后可以手动修正，再一键得到答案。
+      </p>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <div class="panel-inner">
+          <div class="section-head">
+            <div>
+              <span class="badge">步骤 1</span>
+              <h2>导入图片并校正</h2>
+              <p>推荐正对拍摄、尽量避免反光。拖动 1 到 4 号角点，依次对应左上、右上、右下、左下。</p>
+            </div>
+          </div>
+
+          <div class="toolbar">
+            <label class="file-button">
+              <input id="imageInput" type="file" accept="image/*" capture="environment">
+              <span>拍照或上传图片</span>
+            </label>
+            <button class="button ghost" id="pasteImageBtn" type="button">读取剪贴板图片</button>
+            <button class="button ghost" id="resetCornersBtn" type="button">重置四角</button>
+            <button class="button primary" id="recognizeBtn" type="button">校正并识别</button>
+          </div>
+
+          <div class="canvas-shell">
+            <canvas id="photoCanvas" width="720" height="720"></canvas>
+          </div>
+
+          <div class="tips">
+            <div class="tip">如果照片里有多余背景，只要四角准确贴到数独外边框，识别仍然可以工作。</div>
+            <div class="tip">识别结果不是强制锁定的。右侧 9x9 表格可以继续手动修改。</div>
+          </div>
+
+          <div class="status" id="status">等待图片。打开后先拍照或上传一张包含完整数独棋盘的照片。</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-inner">
+          <div class="section-head">
+            <div>
+              <span class="badge">步骤 2</span>
+              <h2>检查识别结果并求解</h2>
+              <p>识别会优先保守，低置信度格子会标成浅橙色。修正后点击“求解数独”。</p>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button class="button primary" id="solveBtn" type="button">求解数独</button>
+            <button class="button ghost" id="clearBtn" type="button">清空网格</button>
+          </div>
+
+          <div class="board-shell">
+            <canvas id="boardCanvas" width="540" height="540"></canvas>
+          </div>
+
+          <div class="legend">
+            <span class="given"><i></i>识别或手工输入的已知数字</span>
+            <span class="uncertain"><i></i>低置信度识别，建议核对</span>
+            <span class="solved"><i></i>求解后补出的数字</span>
+          </div>
+
+          <div class="sudoku-grid" id="sudokuGrid" aria-label="数独网格"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      说明：当前版本不依赖后端或第三方 OCR，识别逻辑基于前端透视校正与模板匹配。
+      对印刷体或屏幕截图效果更稳；如果遇到个别识别错误，直接在右侧修改后再求解即可。
+    </footer>
+  </div>
+  <script>
+    (() => {
+      const PHOTO_CANVAS_SIZE = 720;
+      const BOARD_SIZE = 540;
+      const GRID_SIZE = 9;
+      const TEMPLATE_SIZE = 28;
+      const CORNER_RADIUS = 16;
+
+      const elements = {
+        imageInput: document.getElementById("imageInput"),
+        pasteImageBtn: document.getElementById("pasteImageBtn"),
+        photoCanvas: document.getElementById("photoCanvas"),
+        boardCanvas: document.getElementById("boardCanvas"),
+        resetCornersBtn: document.getElementById("resetCornersBtn"),
+        recognizeBtn: document.getElementById("recognizeBtn"),
+        solveBtn: document.getElementById("solveBtn"),
+        clearBtn: document.getElementById("clearBtn"),
+        status: document.getElementById("status"),
+        sudokuGrid: document.getElementById("sudokuGrid")
+      };
+
+      const photoCtx = elements.photoCanvas.getContext("2d");
+      const boardCtx = elements.boardCanvas.getContext("2d");
+
+      const state = {
+        image: null,
+        objectUrl: null,
+        sourceCanvas: document.createElement("canvas"),
+        sourceCtx: null,
+        corners: null,
+        dragIndex: null,
+        photoScale: 1,
+        photoOffsetX: 0,
+        photoOffsetY: 0,
+        templates: new Map(),
+        lastRecognition: null
+      };
+
+      state.sourceCtx = state.sourceCanvas.getContext("2d", { willReadFrequently: true });
+      boardCtx.imageSmoothingEnabled = true;
+      photoCtx.imageSmoothingEnabled = true;
+
+      initGrid();
+      initTemplates();
+      bindEvents();
+      drawPhotoPlaceholder();
+      drawBoardPlaceholder();
+
+      function bindEvents() {
+        elements.imageInput.addEventListener("change", onImageSelected);
+        elements.pasteImageBtn.addEventListener("click", handleClipboardImage);
+        elements.resetCornersBtn.addEventListener("click", resetCorners);
+        elements.recognizeBtn.addEventListener("click", handleRecognize);
+        elements.solveBtn.addEventListener("click", handleSolve);
+        elements.clearBtn.addEventListener("click", clearGrid);
+
+        elements.photoCanvas.addEventListener("pointerdown", onPointerDown);
+        elements.photoCanvas.addEventListener("pointermove", onPointerMove);
+        elements.photoCanvas.addEventListener("pointerup", onPointerUp);
+        elements.photoCanvas.addEventListener("pointercancel", onPointerUp);
+        window.addEventListener("resize", redrawPhoto);
+      }
+
+      function initGrid() {
+        const fragment = document.createDocumentFragment();
+        for (let row = 0; row < GRID_SIZE; row += 1) {
+          for (let col = 0; col < GRID_SIZE; col += 1) {
+            const input = document.createElement("input");
+            input.type = "text";
+            input.inputMode = "numeric";
+            input.autocomplete = "off";
+            input.className = "cell";
+            input.maxLength = 1;
+            input.dataset.row = String(row);
+            input.dataset.col = String(col);
+            input.setAttribute("aria-label", `第 ${row + 1} 行第 ${col + 1} 列`);
+            input.addEventListener("input", () => {
+              input.value = input.value.replace(/[^1-9]/g, "").slice(0, 1);
+              input.classList.remove("solved", "uncertain");
+              input.classList.toggle("given", input.value !== "");
+            });
+            fragment.appendChild(input);
+          }
+        }
+        elements.sudokuGrid.appendChild(fragment);
+      }
+
+      function initTemplates() {
+        const fonts = [
+          { font: '700 58px "Arial"', yOffset: 1 },
+          { font: '700 58px "Verdana"', yOffset: 1 },
+          { font: '700 58px "Trebuchet MS"', yOffset: 1 },
+          { font: '700 60px "Georgia"', yOffset: 2 },
+          { font: '700 60px "Times New Roman"', yOffset: 2 },
+          { font: '700 58px "Courier New"', yOffset: 1 }
+        ];
+
+        for (let digit = 1; digit <= 9; digit += 1) {
+          const digitTemplates = [];
+          for (const style of fonts) {
+            const canvas = document.createElement("canvas");
+            canvas.width = 80;
+            canvas.height = 80;
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#000";
+            ctx.font = style.font;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(String(digit), canvas.width / 2, canvas.height / 2 + style.yOffset);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const gray = toGray(imageData);
+            const mask = buildMaskFromGray(gray, canvas.width, canvas.height, 220);
+            const component = largestComponent(mask, canvas.width, canvas.height);
+            if (!component) {
+              continue;
+            }
+            digitTemplates.push(extractFeatures(normalizeComponent(component.mask, component.width, component.height)));
+          }
+          state.templates.set(digit, digitTemplates);
+        }
+      }
+
+      function onImageSelected(event) {
+        const [file] = event.target.files || [];
+        if (!file) {
+          return;
+        }
+
+        loadImageFile(file);
+      }
+
+      async function handleClipboardImage() {
+        if (!navigator.clipboard || typeof navigator.clipboard.read !== "function") {
+          setStatus("当前浏览器不支持直接读取剪贴板图片。", "warn");
+          return;
+        }
+
+        setStatus("正在读取剪贴板图片……");
+
+        try {
+          const items = await navigator.clipboard.read();
+          for (const item of items) {
+            const imageType = item.types.find((type) => type.startsWith("image/"));
+            if (!imageType) {
+              continue;
+            }
+
+            const blob = await item.getType(imageType);
+            if (!blob) {
+              continue;
+            }
+
+            loadImageFile(blob);
+            return;
+          }
+
+          setStatus("剪贴板里没有图片，当前操作未生效。", "warn");
+        } catch (error) {
+          console.error(error);
+          setStatus("读取剪贴板失败。请确认已经复制图片，并允许浏览器访问剪贴板。", "warn");
+        }
+      }
+
+      function loadImageFile(file) {
+        if (!file.type || !file.type.startsWith("image/")) {
+          setStatus("当前读取到的不是图片文件。", "warn");
+          return;
+        }
+
+        if (state.objectUrl) {
+          URL.revokeObjectURL(state.objectUrl);
+        }
+
+        const objectUrl = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = () => {
+          state.image = image;
+          state.objectUrl = objectUrl;
+          state.sourceCanvas.width = image.naturalWidth;
+          state.sourceCanvas.height = image.naturalHeight;
+          state.sourceCtx.drawImage(image, 0, 0);
+          state.corners = defaultCorners(image.naturalWidth, image.naturalHeight);
+          clearBoardPreview();
+          redrawPhoto();
+          setStatus("图片已载入。把四个角点拖到数独外边框四角，然后点击“校正并识别”。");
+        };
+        image.onerror = () => {
+          setStatus("图片加载失败，请换一张清晰的数独照片。", "warn");
+          URL.revokeObjectURL(objectUrl);
+        };
+        image.src = objectUrl;
+      }
+
+      function defaultCorners(width, height) {
+        const square = Math.min(width, height) * 0.82;
+        const left = (width - square) / 2;
+        const top = (height - square) / 2;
+        return [
+          { x: left, y: top },
+          { x: left + square, y: top },
+          { x: left + square, y: top + square },
+          { x: left, y: top + square }
+        ];
+      }
+
+      function resetCorners() {
+        if (!state.image) {
+          setStatus("还没有图片可以重置。先拍照或上传数独图片。", "warn");
+          return;
+        }
+        state.corners = defaultCorners(state.image.naturalWidth, state.image.naturalHeight);
+        redrawPhoto();
+        setStatus("四角已重置。请再次拖动到数独外边框。");
+      }
+
+      function drawPhotoPlaceholder() {
+        photoCtx.clearRect(0, 0, PHOTO_CANVAS_SIZE, PHOTO_CANVAS_SIZE);
+        photoCtx.fillStyle = "#f1e7d4";
+        photoCtx.fillRect(0, 0, PHOTO_CANVAS_SIZE, PHOTO_CANVAS_SIZE);
+        photoCtx.fillStyle = "rgba(93, 67, 43, 0.14)";
+        photoCtx.fillRect(62, 62, PHOTO_CANVAS_SIZE - 124, PHOTO_CANVAS_SIZE - 124);
+        photoCtx.fillStyle = "#6e5b47";
+        photoCtx.font = '700 26px "Trebuchet MS", "Segoe UI", sans-serif';
+        photoCtx.textAlign = "center";
+        photoCtx.textBaseline = "middle";
+        photoCtx.fillText("在这里加载数独照片", PHOTO_CANVAS_SIZE / 2, PHOTO_CANVAS_SIZE / 2 - 12);
+        photoCtx.font = '500 16px "Trebuchet MS", "Segoe UI", sans-serif';
+        photoCtx.fillText("支持手机相机直拍，也支持本地图片", PHOTO_CANVAS_SIZE / 2, PHOTO_CANVAS_SIZE / 2 + 22);
+      }
+
+      function drawBoardPlaceholder() {
+        boardCtx.clearRect(0, 0, BOARD_SIZE, BOARD_SIZE);
+        boardCtx.fillStyle = "#f4ecdd";
+        boardCtx.fillRect(0, 0, BOARD_SIZE, BOARD_SIZE);
+        const cell = BOARD_SIZE / GRID_SIZE;
+        for (let i = 0; i <= GRID_SIZE; i += 1) {
+          boardCtx.beginPath();
+          boardCtx.strokeStyle = i % 3 === 0 ? "rgba(51, 35, 21, 0.6)" : "rgba(80, 56, 35, 0.18)";
+          boardCtx.lineWidth = i % 3 === 0 ? 2.6 : 1;
+          boardCtx.moveTo(0, i * cell);
+          boardCtx.lineTo(BOARD_SIZE, i * cell);
+          boardCtx.moveTo(i * cell, 0);
+          boardCtx.lineTo(i * cell, BOARD_SIZE);
+          boardCtx.stroke();
+        }
+        boardCtx.fillStyle = "#7b6751";
+        boardCtx.font = '600 20px "Trebuchet MS", "Segoe UI", sans-serif';
+        boardCtx.textAlign = "center";
+        boardCtx.fillText("校正后的棋盘会显示在这里", BOARD_SIZE / 2, BOARD_SIZE / 2);
+      }
+
+      function redrawPhoto() {
+        if (!state.image) {
+          drawPhotoPlaceholder();
+          return;
+        }
+
+        const canvas = elements.photoCanvas;
+        const width = state.image.naturalWidth;
+        const height = state.image.naturalHeight;
+        const scale = Math.min(canvas.width / width, canvas.height / height);
+        const drawWidth = width * scale;
+        const drawHeight = height * scale;
+        const offsetX = (canvas.width - drawWidth) / 2;
+        const offsetY = (canvas.height - drawHeight) / 2;
+
+        state.photoScale = scale;
+        state.photoOffsetX = offsetX;
+        state.photoOffsetY = offsetY;
+
+        photoCtx.clearRect(0, 0, canvas.width, canvas.height);
+        photoCtx.fillStyle = "#f1e7d4";
+        photoCtx.fillRect(0, 0, canvas.width, canvas.height);
+        photoCtx.drawImage(state.image, offsetX, offsetY, drawWidth, drawHeight);
+        drawCornerOverlay();
+      }
+
+      function drawCornerOverlay() {
+        if (!state.corners) {
+          return;
+        }
+
+        const cornerPoints = state.corners.map(toCanvasPoint);
+
+        photoCtx.save();
+        photoCtx.beginPath();
+        cornerPoints.forEach((point, index) => {
+          if (index === 0) {
+            photoCtx.moveTo(point.x, point.y);
+          } else {
+            photoCtx.lineTo(point.x, point.y);
+          }
+        });
+        photoCtx.closePath();
+        photoCtx.fillStyle = "rgba(212, 106, 47, 0.12)";
+        photoCtx.fill();
+        photoCtx.strokeStyle = "rgba(180, 79, 31, 0.92)";
+        photoCtx.lineWidth = 3;
+        photoCtx.stroke();
+
+        cornerPoints.forEach((point, index) => {
+          photoCtx.beginPath();
+          photoCtx.fillStyle = "#fff8f2";
+          photoCtx.arc(point.x, point.y, CORNER_RADIUS, 0, Math.PI * 2);
+          photoCtx.fill();
+          photoCtx.lineWidth = 3;
+          photoCtx.strokeStyle = "#c95b26";
+          photoCtx.stroke();
+          photoCtx.fillStyle = "#8a3a17";
+          photoCtx.font = '700 16px "Trebuchet MS", "Segoe UI", sans-serif';
+          photoCtx.textAlign = "center";
+          photoCtx.textBaseline = "middle";
+          photoCtx.fillText(String(index + 1), point.x, point.y + 0.5);
+        });
+        photoCtx.restore();
+      }
+
+      function toCanvasPoint(point) {
+        return {
+          x: state.photoOffsetX + point.x * state.photoScale,
+          y: state.photoOffsetY + point.y * state.photoScale
+        };
+      }
+
+      function toImagePoint(point) {
+        const x = (point.x - state.photoOffsetX) / state.photoScale;
+        const y = (point.y - state.photoOffsetY) / state.photoScale;
+        return {
+          x: clamp(x, 0, state.image.naturalWidth),
+          y: clamp(y, 0, state.image.naturalHeight)
+        };
+      }
+
+      function onPointerDown(event) {
+        if (!state.corners) {
+          return;
+        }
+        const point = getCanvasPointer(event);
+        const hitIndex = state.corners.findIndex((corner) => {
+          const display = toCanvasPoint(corner);
+          return Math.hypot(display.x - point.x, display.y - point.y) <= CORNER_RADIUS + 8;
+        });
+        if (hitIndex === -1) {
+          return;
+        }
+        state.dragIndex = hitIndex;
+        elements.photoCanvas.setPointerCapture(event.pointerId);
+      }
+
+      function onPointerMove(event) {
+        if (state.dragIndex === null) {
+          return;
+        }
+        const point = getCanvasPointer(event);
+        state.corners[state.dragIndex] = toImagePoint(point);
+        redrawPhoto();
+      }
+
+      function onPointerUp(event) {
+        if (state.dragIndex === null) {
+          return;
+        }
+        state.dragIndex = null;
+        if (elements.photoCanvas.hasPointerCapture(event.pointerId)) {
+          elements.photoCanvas.releasePointerCapture(event.pointerId);
+        }
+      }
+
+      function getCanvasPointer(event) {
+        const rect = elements.photoCanvas.getBoundingClientRect();
+        return {
+          x: (event.clientX - rect.left) * (elements.photoCanvas.width / rect.width),
+          y: (event.clientY - rect.top) * (elements.photoCanvas.height / rect.height)
+        };
+      }
+
+      function handleRecognize() {
+        if (!state.image || !state.corners) {
+          setStatus("没有可识别的图片。先拍照或上传一张数独图片。", "warn");
+          return;
+        }
+
+        setStatus("正在校正图片并识别数字……");
+
+        try {
+          const boardImage = warpBoard();
+          drawBoardImage(boardImage);
+          const recognition = recognizeBoard(boardImage);
+          applyRecognizedGrid(recognition);
+
+          const detected = recognition.values.filter(Boolean).length;
+          const uncertain = recognition.uncertainCount;
+          state.lastRecognition = recognition;
+
+          const message = detected === 0
+            ? "没有识别出有效数字。请检查四角是否贴合外边框，或直接在右侧网格手动输入题目。"
+            : `识别完成：共识别 ${detected} 个数字，低置信度 ${uncertain} 个。建议核对浅橙色格子后再求解。`;
+
+          setStatus(message, detected > 0 ? "ok" : "warn");
+        } catch (error) {
+          console.error(error);
+          setStatus("识别失败。通常是四角不准确或图片过暗，请重新调整四角后再试。", "warn");
+        }
+      }
+
+      function warpBoard() {
+        const width = state.sourceCanvas.width;
+        const height = state.sourceCanvas.height;
+        const srcData = state.sourceCtx.getImageData(0, 0, width, height);
+        const targetPoints = [
+          { x: 0, y: 0 },
+          { x: BOARD_SIZE - 1, y: 0 },
+          { x: BOARD_SIZE - 1, y: BOARD_SIZE - 1 },
+          { x: 0, y: BOARD_SIZE - 1 }
+        ];
+        const homography = computeHomography(targetPoints, state.corners);
+        const result = new ImageData(BOARD_SIZE, BOARD_SIZE);
+
+        for (let y = 0; y < BOARD_SIZE; y += 1) {
+          for (let x = 0; x < BOARD_SIZE; x += 1) {
+            const source = applyHomography(homography, x + 0.5, y + 0.5);
+            const color = bilinearSample(srcData, source.x, source.y, width, height);
+            const index = (y * BOARD_SIZE + x) * 4;
+            result.data[index] = color[0];
+            result.data[index + 1] = color[1];
+            result.data[index + 2] = color[2];
+            result.data[index + 3] = 255;
+          }
+        }
+
+        return result;
+      }
+
+      function drawBoardImage(imageData) {
+        boardCtx.putImageData(imageData, 0, 0);
+        const cell = BOARD_SIZE / GRID_SIZE;
+        boardCtx.save();
+        for (let i = 0; i <= GRID_SIZE; i += 1) {
+          boardCtx.beginPath();
+          boardCtx.strokeStyle = i % 3 === 0 ? "rgba(51, 35, 21, 0.58)" : "rgba(80, 56, 35, 0.16)";
+          boardCtx.lineWidth = i % 3 === 0 ? 2.5 : 0.8;
+          boardCtx.moveTo(0, i * cell);
+          boardCtx.lineTo(BOARD_SIZE, i * cell);
+          boardCtx.moveTo(i * cell, 0);
+          boardCtx.lineTo(i * cell, BOARD_SIZE);
+          boardCtx.stroke();
+        }
+        boardCtx.restore();
+      }
+
+      function clearBoardPreview() {
+        state.lastRecognition = null;
+        drawBoardPlaceholder();
+      }
+
+      function recognizeBoard(imageData) {
+        const gray = toGray(imageData);
+        const globalThreshold = otsuThreshold(gray);
+        const cellSize = BOARD_SIZE / GRID_SIZE;
+        const values = [];
+        const uncertainCells = [];
+
+        for (let row = 0; row < GRID_SIZE; row += 1) {
+          for (let col = 0; col < GRID_SIZE; col += 1) {
+            const left = Math.floor(col * cellSize);
+            const top = Math.floor(row * cellSize);
+            const box = extractCell(gray, left, top, Math.ceil(cellSize), Math.ceil(cellSize), globalThreshold);
+            if (!box) {
+              values.push(0);
+              uncertainCells.push(false);
+              continue;
+            }
+
+            const features = extractFeatures(normalizeComponent(box.mask, box.width, box.height));
+            const match = classifyDigit(features);
+            values.push(match.value);
+            uncertainCells.push(match.value > 0 && (match.score < 0.77 || match.margin < 0.05));
+          }
+        }
+
+        return {
+          values,
+          uncertainCells,
+          uncertainCount: uncertainCells.filter(Boolean).length
+        };
+      }
+
+      function extractCell(gray, startX, startY, width, height, globalThreshold) {
+        const margin = Math.max(5, Math.round(width * 0.16));
+        const x0 = startX + margin;
+        const y0 = startY + margin;
+        const x1 = startX + width - margin;
+        const y1 = startY + height - margin;
+        const regionWidth = Math.max(1, x1 - x0);
+        const regionHeight = Math.max(1, y1 - y0);
+
+        let sum = 0;
+        let sumSq = 0;
+        let count = 0;
+
+        for (let y = y0; y < y1; y += 1) {
+          for (let x = x0; x < x1; x += 1) {
+            const value = gray[y * BOARD_SIZE + x];
+            sum += value;
+            sumSq += value * value;
+            count += 1;
+          }
+        }
+
+        if (count === 0) {
+          return null;
+        }
+
+        const mean = sum / count;
+        const variance = Math.max(sumSq / count - mean * mean, 0);
+        const std = Math.sqrt(variance);
+        const threshold = clamp(Math.min(globalThreshold + 10, mean - std * 0.45), 60, 220);
+        const mask = buildMaskFromGray(gray, BOARD_SIZE, BOARD_SIZE, threshold, x0, y0, x1, y1);
+        const component = largestComponent(mask, regionWidth, regionHeight);
+
+        if (!component) {
+          return null;
+        }
+
+        const density = component.area / (regionWidth * regionHeight);
+        if (density < 0.025) {
+          return null;
+        }
+
+        return component;
+      }
+
+      function buildMaskFromGray(gray, width, height, threshold, minX = 0, minY = 0, maxX = width, maxY = height) {
+        const maskWidth = Math.max(1, maxX - minX);
+        const maskHeight = Math.max(1, maxY - minY);
+        const mask = new Uint8Array(maskWidth * maskHeight);
+
+        for (let y = minY; y < maxY; y += 1) {
+          for (let x = minX; x < maxX; x += 1) {
+            const value = gray[y * width + x];
+            const targetIndex = (y - minY) * maskWidth + (x - minX);
+            if (value < threshold) {
+              mask[targetIndex] = 1;
+            }
+          }
+        }
+        return mask;
+      }
+
+      function largestComponent(mask, width, height) {
+        const visited = new Uint8Array(mask.length);
+        let best = null;
+
+        for (let index = 0; index < mask.length; index += 1) {
+          if (!mask[index] || visited[index]) {
+            continue;
+          }
+
+          const queue = [index];
+          visited[index] = 1;
+          const pixels = [];
+          let head = 0;
+          let minX = width;
+          let minY = height;
+          let maxX = 0;
+          let maxY = 0;
+
+          while (head < queue.length) {
+            const current = queue[head];
+            head += 1;
+            const x = current % width;
+            const y = Math.floor(current / width);
+            pixels.push(current);
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+
+            const neighbors = [current - 1, current + 1, current - width, current + width];
+            if (x === 0) {
+              neighbors[0] = -1;
+            }
+            if (x === width - 1) {
+              neighbors[1] = -1;
+            }
+            if (y === 0) {
+              neighbors[2] = -1;
+            }
+            if (y === height - 1) {
+              neighbors[3] = -1;
+            }
+
+            for (const neighbor of neighbors) {
+              if (neighbor < 0 || neighbor >= mask.length || visited[neighbor] || !mask[neighbor]) {
+                continue;
+              }
+              visited[neighbor] = 1;
+              queue.push(neighbor);
+            }
+          }
+
+          if (pixels.length < 8) {
+            continue;
+          }
+
+          const boxWidth = maxX - minX + 1;
+          const boxHeight = maxY - minY + 1;
+          const localMask = new Float32Array(boxWidth * boxHeight);
+          for (const pixel of pixels) {
+            const px = pixel % width - minX;
+            const py = Math.floor(pixel / width) - minY;
+            localMask[py * boxWidth + px] = 1;
+          }
+
+          const candidate = {
+            area: pixels.length,
+            width: boxWidth,
+            height: boxHeight,
+            mask: localMask
+          };
+
+          if (!best || candidate.area > best.area) {
+            best = candidate;
+          }
+        }
+
+        return best;
+      }
+
+      function normalizeComponent(mask, width, height) {
+        const output = new Float32Array(TEMPLATE_SIZE * TEMPLATE_SIZE);
+        const padding = 4;
+        const available = TEMPLATE_SIZE - padding * 2;
+        const scale = Math.min(available / width, available / height);
+        const targetWidth = width * scale;
+        const targetHeight = height * scale;
+        const offsetX = (TEMPLATE_SIZE - targetWidth) / 2;
+        const offsetY = (TEMPLATE_SIZE - targetHeight) / 2;
+
+        for (let y = 0; y < TEMPLATE_SIZE; y += 1) {
+          for (let x = 0; x < TEMPLATE_SIZE; x += 1) {
+            const sx = (x - offsetX) / scale;
+            const sy = (y - offsetY) / scale;
+            if (sx < 0 || sy < 0 || sx > width - 1 || sy > height - 1) {
+              continue;
+            }
+            output[y * TEMPLATE_SIZE + x] = bilinearMask(mask, width, height, sx, sy);
+          }
+        }
+
+        return output;
+      }
+
+      function bilinearMask(mask, width, height, x, y) {
+        const x0 = Math.floor(x);
+        const y0 = Math.floor(y);
+        const x1 = Math.min(x0 + 1, width - 1);
+        const y1 = Math.min(y0 + 1, height - 1);
+        const dx = x - x0;
+        const dy = y - y0;
+
+        const q11 = mask[y0 * width + x0];
+        const q21 = mask[y0 * width + x1];
+        const q12 = mask[y1 * width + x0];
+        const q22 = mask[y1 * width + x1];
+
+        const top = q11 * (1 - dx) + q21 * dx;
+        const bottom = q12 * (1 - dx) + q22 * dx;
+        return top * (1 - dy) + bottom * dy;
+      }
+
+      function extractFeatures(mask) {
+        const blocks = [];
+        const rows = new Float32Array(TEMPLATE_SIZE);
+        const cols = new Float32Array(TEMPLATE_SIZE);
+        let ink = 0;
+
+        for (let y = 0; y < TEMPLATE_SIZE; y += 1) {
+          for (let x = 0; x < TEMPLATE_SIZE; x += 1) {
+            const value = mask[y * TEMPLATE_SIZE + x];
+            ink += value;
+            rows[y] += value;
+            cols[x] += value;
+          }
+        }
+
+        const blockSize = 4;
+        for (let by = 0; by < 7; by += 1) {
+          for (let bx = 0; bx < 7; bx += 1) {
+            let sum = 0;
+            for (let y = 0; y < blockSize; y += 1) {
+              for (let x = 0; x < blockSize; x += 1) {
+                const px = bx * blockSize + x;
+                const py = by * blockSize + y;
+                sum += mask[py * TEMPLATE_SIZE + px];
+              }
+            }
+            blocks.push(sum / (blockSize * blockSize));
+          }
+        }
+
+        const normalizedInk = ink || 1;
+        for (let i = 0; i < TEMPLATE_SIZE; i += 1) {
+          rows[i] /= normalizedInk;
+          cols[i] /= normalizedInk;
+        }
+
+        return {
+          blocks: Float32Array.from(blocks),
+          rows,
+          cols,
+          ink: ink / (TEMPLATE_SIZE * TEMPLATE_SIZE)
+        };
+      }
+
+      function classifyDigit(features) {
+        let bestValue = 0;
+        let bestScore = -Infinity;
+        let secondScore = -Infinity;
+
+        for (let digit = 1; digit <= 9; digit += 1) {
+          const templates = state.templates.get(digit) || [];
+          let digitScore = -Infinity;
+          for (const template of templates) {
+            digitScore = Math.max(digitScore, compareFeatures(features, template));
+          }
+
+          if (digitScore > bestScore) {
+            secondScore = bestScore;
+            bestScore = digitScore;
+            bestValue = digit;
+          } else if (digitScore > secondScore) {
+            secondScore = digitScore;
+          }
+        }
+
+        const margin = bestScore - secondScore;
+        if (bestScore < 0.67 || margin < 0.015) {
+          return { value: 0, score: bestScore, margin };
+        }
+        return { value: bestValue, score: bestScore, margin };
+      }
+
+      function compareFeatures(a, b) {
+        const block = cosineSimilarity(a.blocks, b.blocks);
+        const rows = cosineSimilarity(a.rows, b.rows);
+        const cols = cosineSimilarity(a.cols, b.cols);
+        const inkPenalty = Math.abs(a.ink - b.ink);
+        return block * 0.74 + rows * 0.13 + cols * 0.13 - inkPenalty * 0.6;
+      }
+
+      function cosineSimilarity(a, b) {
+        let dot = 0;
+        let aLen = 0;
+        let bLen = 0;
+        for (let i = 0; i < a.length; i += 1) {
+          dot += a[i] * b[i];
+          aLen += a[i] * a[i];
+          bLen += b[i] * b[i];
+        }
+        if (aLen === 0 || bLen === 0) {
+          return 0;
+        }
+        return dot / (Math.sqrt(aLen) * Math.sqrt(bLen));
+      }
+
+      function applyRecognizedGrid(recognition) {
+        const cells = getCells();
+        recognition.values.forEach((value, index) => {
+          const cell = cells[index];
+          const isUncertain = recognition.uncertainCells[index];
+          cell.value = value > 0 ? String(value) : "";
+          cell.classList.remove("solved", "given", "uncertain");
+          if (value > 0) {
+            cell.classList.add("given");
+            if (isUncertain) {
+              cell.classList.add("uncertain");
+            }
+          }
+        });
+      }
+
+      function handleSolve() {
+        const grid = readGrid();
+        const validation = validateGrid(grid);
+        if (!validation.valid) {
+          setStatus(validation.message, "warn");
+          return;
+        }
+
+        const givens = grid.map((value) => value > 0);
+        const solved = solveSudoku(grid.slice());
+        if (!solved) {
+          setStatus("当前题面无解。请检查识别结果，尤其是浅橙色格子。", "warn");
+          return;
+        }
+
+        const cells = getCells();
+        solved.forEach((value, index) => {
+          const cell = cells[index];
+          cell.value = String(value);
+          cell.classList.remove("solved", "given", "uncertain");
+          if (givens[index]) {
+            cell.classList.add("given");
+          } else {
+            cell.classList.add("solved");
+          }
+        });
+
+        setStatus("数独已求解。深色背景的是原题数字，浅橙色的是补出的答案。", "ok");
+      }
+
+      function clearGrid() {
+        getCells().forEach((cell) => {
+          cell.value = "";
+          cell.classList.remove("given", "solved", "uncertain");
+        });
+        setStatus("网格已清空。你可以继续识别新图片，或直接手动输入题目。");
+      }
+
+      function readGrid() {
+        return getCells().map((cell) => {
+          const value = Number(cell.value);
+          return Number.isInteger(value) ? value : 0;
+        });
+      }
+
+      function getCells() {
+        return Array.from(elements.sudokuGrid.querySelectorAll(".cell"));
+      }
+
+      function validateGrid(grid) {
+        for (let row = 0; row < 9; row += 1) {
+          const seen = new Set();
+          for (let col = 0; col < 9; col += 1) {
+            const value = grid[row * 9 + col];
+            if (!value) {
+              continue;
+            }
+            if (seen.has(value)) {
+              return {
+                valid: false,
+                message: `第 ${row + 1} 行存在重复数字 ${value}。请先修正后再求解。`
+              };
+            }
+            seen.add(value);
+          }
+        }
+
+        for (let col = 0; col < 9; col += 1) {
+          const seen = new Set();
+          for (let row = 0; row < 9; row += 1) {
+            const value = grid[row * 9 + col];
+            if (!value) {
+              continue;
+            }
+            if (seen.has(value)) {
+              return {
+                valid: false,
+                message: `第 ${col + 1} 列存在重复数字 ${value}。请先修正后再求解。`
+              };
+            }
+            seen.add(value);
+          }
+        }
+
+        for (let boxRow = 0; boxRow < 3; boxRow += 1) {
+          for (let boxCol = 0; boxCol < 3; boxCol += 1) {
+            const seen = new Set();
+            for (let row = 0; row < 3; row += 1) {
+              for (let col = 0; col < 3; col += 1) {
+                const index = (boxRow * 3 + row) * 9 + (boxCol * 3 + col);
+                const value = grid[index];
+                if (!value) {
+                  continue;
+                }
+                if (seen.has(value)) {
+                  return {
+                    valid: false,
+                    message: `第 ${boxRow + 1} 行宫、第 ${boxCol + 1} 列宫存在重复数字 ${value}。`
+                  };
+                }
+                seen.add(value);
+              }
+            }
+          }
+        }
+
+        return { valid: true };
+      }
+
+      function solveSudoku(grid) {
+        const rows = new Uint16Array(9);
+        const cols = new Uint16Array(9);
+        const boxes = new Uint16Array(9);
+        const empties = [];
+
+        for (let row = 0; row < 9; row += 1) {
+          for (let col = 0; col < 9; col += 1) {
+            const index = row * 9 + col;
+            const value = grid[index];
+            if (!value) {
+              empties.push(index);
+              continue;
+            }
+            const bit = 1 << value;
+            const box = Math.floor(row / 3) * 3 + Math.floor(col / 3);
+            rows[row] |= bit;
+            cols[col] |= bit;
+            boxes[box] |= bit;
+          }
+        }
+
+        function search() {
+          if (empties.length === 0) {
+            return true;
+          }
+
+          let bestPosition = -1;
+          let bestMask = 0;
+          let bestCount = 10;
+
+          for (let i = 0; i < empties.length; i += 1) {
+            const index = empties[i];
+            const row = Math.floor(index / 9);
+            const col = index % 9;
+            const box = Math.floor(row / 3) * 3 + Math.floor(col / 3);
+            const used = rows[row] | cols[col] | boxes[box];
+            const mask = (~used) & 0x3FE;
+            const count = countBits(mask);
+            if (count === 0) {
+              return false;
+            }
+            if (count < bestCount) {
+              bestCount = count;
+              bestMask = mask;
+              bestPosition = i;
+              if (count === 1) {
+                break;
+              }
+            }
+          }
+
+          const [index] = empties.splice(bestPosition, 1);
+          const row = Math.floor(index / 9);
+          const col = index % 9;
+          const box = Math.floor(row / 3) * 3 + Math.floor(col / 3);
+
+          for (let digit = 1; digit <= 9; digit += 1) {
+            const bit = 1 << digit;
+            if ((bestMask & bit) === 0) {
+              continue;
+            }
+
+            grid[index] = digit;
+            rows[row] |= bit;
+            cols[col] |= bit;
+            boxes[box] |= bit;
+
+            if (search()) {
+              return true;
+            }
+
+            grid[index] = 0;
+            rows[row] ^= bit;
+            cols[col] ^= bit;
+            boxes[box] ^= bit;
+          }
+
+          empties.splice(bestPosition, 0, index);
+          return false;
+        }
+
+        return search() ? grid : null;
+      }
+
+      function countBits(mask) {
+        let count = 0;
+        let value = mask;
+        while (value) {
+          value &= value - 1;
+          count += 1;
+        }
+        return count;
+      }
+
+      function computeHomography(fromPoints, toPoints) {
+        const matrix = [];
+        const values = [];
+
+        for (let i = 0; i < 4; i += 1) {
+          const u = fromPoints[i].x;
+          const v = fromPoints[i].y;
+          const x = toPoints[i].x;
+          const y = toPoints[i].y;
+
+          matrix.push([u, v, 1, 0, 0, 0, -u * x, -v * x]);
+          values.push(x);
+          matrix.push([0, 0, 0, u, v, 1, -u * y, -v * y]);
+          values.push(y);
+        }
+
+        const solution = solveLinearSystem(matrix, values);
+        return [
+          solution[0], solution[1], solution[2],
+          solution[3], solution[4], solution[5],
+          solution[6], solution[7], 1
+        ];
+      }
+
+      function solveLinearSystem(matrix, values) {
+        const size = values.length;
+        const augmented = matrix.map((row, rowIndex) => [...row, values[rowIndex]]);
+
+        for (let col = 0; col < size; col += 1) {
+          let pivotRow = col;
+          for (let row = col + 1; row < size; row += 1) {
+            if (Math.abs(augmented[row][col]) > Math.abs(augmented[pivotRow][col])) {
+              pivotRow = row;
+            }
+          }
+
+          if (Math.abs(augmented[pivotRow][col]) < 1e-8) {
+            throw new Error("无法计算透视变换");
+          }
+
+          if (pivotRow !== col) {
+            const temp = augmented[col];
+            augmented[col] = augmented[pivotRow];
+            augmented[pivotRow] = temp;
+          }
+
+          const pivot = augmented[col][col];
+          for (let currentCol = col; currentCol <= size; currentCol += 1) {
+            augmented[col][currentCol] /= pivot;
+          }
+
+          for (let row = 0; row < size; row += 1) {
+            if (row === col) {
+              continue;
+            }
+            const factor = augmented[row][col];
+            for (let currentCol = col; currentCol <= size; currentCol += 1) {
+              augmented[row][currentCol] -= factor * augmented[col][currentCol];
+            }
+          }
+        }
+
+        return augmented.map((row) => row[size]);
+      }
+
+      function applyHomography(matrix, x, y) {
+        const denominator = matrix[6] * x + matrix[7] * y + matrix[8];
+        return {
+          x: (matrix[0] * x + matrix[1] * y + matrix[2]) / denominator,
+          y: (matrix[3] * x + matrix[4] * y + matrix[5]) / denominator
+        };
+      }
+
+      function bilinearSample(imageData, x, y, width, height) {
+        if (x < 0 || y < 0 || x > width - 1 || y > height - 1) {
+          return [255, 255, 255];
+        }
+
+        const x0 = Math.floor(x);
+        const y0 = Math.floor(y);
+        const x1 = Math.min(x0 + 1, width - 1);
+        const y1 = Math.min(y0 + 1, height - 1);
+        const dx = x - x0;
+        const dy = y - y0;
+
+        const c00 = getPixel(imageData.data, width, x0, y0);
+        const c10 = getPixel(imageData.data, width, x1, y0);
+        const c01 = getPixel(imageData.data, width, x0, y1);
+        const c11 = getPixel(imageData.data, width, x1, y1);
+
+        const sample = [0, 0, 0];
+        for (let i = 0; i < 3; i += 1) {
+          const top = c00[i] * (1 - dx) + c10[i] * dx;
+          const bottom = c01[i] * (1 - dx) + c11[i] * dx;
+          sample[i] = Math.round(top * (1 - dy) + bottom * dy);
+        }
+        return sample;
+      }
+
+      function getPixel(data, width, x, y) {
+        const index = (y * width + x) * 4;
+        return [data[index], data[index + 1], data[index + 2]];
+      }
+
+      function toGray(imageData) {
+        const gray = new Uint8ClampedArray(imageData.width * imageData.height);
+        for (let i = 0, pixel = 0; i < imageData.data.length; i += 4, pixel += 1) {
+          gray[pixel] = Math.round(
+            imageData.data[i] * 0.299 +
+            imageData.data[i + 1] * 0.587 +
+            imageData.data[i + 2] * 0.114
+          );
+        }
+        return gray;
+      }
+
+      function otsuThreshold(gray) {
+        const histogram = new Uint32Array(256);
+        for (let i = 0; i < gray.length; i += 1) {
+          histogram[gray[i]] += 1;
+        }
+
+        const total = gray.length;
+        let sum = 0;
+        for (let i = 0; i < 256; i += 1) {
+          sum += i * histogram[i];
+        }
+
+        let sumBackground = 0;
+        let weightBackground = 0;
+        let maxVariance = 0;
+        let threshold = 128;
+
+        for (let i = 0; i < 256; i += 1) {
+          weightBackground += histogram[i];
+          if (weightBackground === 0) {
+            continue;
+          }
+
+          const weightForeground = total - weightBackground;
+          if (weightForeground === 0) {
+            break;
+          }
+
+          sumBackground += i * histogram[i];
+          const meanBackground = sumBackground / weightBackground;
+          const meanForeground = (sum - sumBackground) / weightForeground;
+          const variance = weightBackground * weightForeground * (meanBackground - meanForeground) ** 2;
+
+          if (variance > maxVariance) {
+            maxVariance = variance;
+            threshold = i;
+          }
+        }
+
+        return threshold;
+      }
+
+      function setStatus(message, kind = "") {
+        elements.status.textContent = message;
+        elements.status.className = "status";
+        if (kind) {
+          elements.status.classList.add(kind);
+        }
+      }
+
+      function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+      }
+    })();
+  </script>
+</body>
+</html>
