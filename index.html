@@ -420,7 +420,7 @@
 
           <div class="toolbar">
             <label class="file-button">
-              <input id="imageInput" type="file" accept="image/*" capture="environment">
+              <input id="imageInput" type="file" accept="image/*">
               <span>拍照或上传图片</span>
             </label>
             <button class="button ghost" id="pasteImageBtn" type="button">读取剪贴板图片</button>
@@ -607,6 +607,7 @@
         }
 
         loadImageFile(file);
+        event.target.value = "";
       }
 
       async function handleClipboardImage() {
